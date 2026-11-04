@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from app.database import db
+from app.routes import peliculas
 
 app = FastAPI(title="Cine API")
+app.include_router(peliculas.router)
 
 
 @app.get("/")
