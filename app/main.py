@@ -2,9 +2,10 @@ from fastapi import FastAPI
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse
 from app.database import db
-from app.routes import peliculas, salas, funciones
+from app.routes import peliculas, salas, funciones, auth
 
 app = FastAPI(title="Cine API", docs_url=None)
+app.include_router(auth.router)
 app.include_router(peliculas.router)
 app.include_router(salas.router)
 app.include_router(funciones.router)
