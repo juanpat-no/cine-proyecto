@@ -1,9 +1,10 @@
 from datetime import date, datetime, timedelta
 from typing import Optional
 from bson import ObjectId
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.database import db
 from app.models.funcion import FuncionCrear, FuncionActualizar
+from app.seguridad import requerir_admin
 
 router = APIRouter(prefix="/funciones", tags=["Funciones"])
 coleccion = db["funciones"]
@@ -24,7 +25,7 @@ def serializar(doc: dict) -> dict:
     return doc
 
 
-@router.post("/", status_code=201)
+@router.post("/", status_code=201, dependencies=[Depends(requerir_admin)])
 def crear_funcion(datos: FuncionCrear):
     pelicula = db["peliculas"].find_one({"_id": a_object_id(datos.pelicula_id)})
     if not pelicula:
@@ -111,7 +112,7 @@ def obtener_funcion(id: str):
     return serializar(doc)
 
 
-@router.put("/{id}")
+@router.put("/{id}", dependencies=[Depends(requerir_admin)])
 def actualizar_funcion(id: str, datos: FuncionActualizar):
     resultado = coleccion.update_one(
         {"_id": a_object_id(id)}, {"$set": {"precio": datos.precio}}
@@ -121,7 +122,7 @@ def actualizar_funcion(id: str, datos: FuncionActualizar):
     return serializar(coleccion.find_one({"_id": a_object_id(id)}))
 
 
-@router.delete("/{id}")
+@router.delete("/{id}", dependencies=[Depends(requerir_admin)])
 def eliminar_funcion(id: str):
     doc = coleccion.find_one({"_id": a_object_id(id)})
     if not doc:

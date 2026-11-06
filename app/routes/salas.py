@@ -2,9 +2,10 @@ import re
 from datetime import datetime
 from typing import Optional
 from bson import ObjectId
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.database import db
 from app.models.sala import SalaCrear, SalaActualizar
+from app.seguridad import requerir_admin
 
 router = APIRouter(prefix="/salas", tags=["Salas"])
 coleccion = db["salas"]
@@ -29,7 +30,7 @@ def generar_asientos(filas: int, columnas: int) -> list:
     ]
 
 
-@router.post("/", status_code=201)
+@router.post("/", status_code=201, dependencies=[Depends(requerir_admin)])
 def crear_sala(datos: SalaCrear):
     existe = coleccion.find_one(
         {"nombre": {"$regex": f"^{re.escape(datos.nombre)}$", "$options": "i"}}
@@ -64,7 +65,7 @@ def obtener_sala(id: str):
     return serializar(doc)
 
 
-@router.put("/{id}")
+@router.put("/{id}", dependencies=[Depends(requerir_admin)])
 def actualizar_sala(id: str, datos: SalaActualizar):
     cambios = datos.model_dump(exclude_unset=True)
     if not cambios:
@@ -84,7 +85,7 @@ def actualizar_sala(id: str, datos: SalaActualizar):
     return serializar(coleccion.find_one({"_id": a_object_id(id)}))
 
 
-@router.delete("/{id}")
+@router.delete("/{id}", dependencies=[Depends(requerir_admin)])
 def eliminar_sala(id: str):
     oid = a_object_id(id)
     futuras = db["funciones"].find_one({"sala_id": oid, "inicio": {"$gte": datetime.now()}})
@@ -94,5 +95,4 @@ def eliminar_sala(id: str):
         )
     resultado = coleccion.delete_one({"_id": oid})
     if resultado.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Sala no encontrada")
-    return {"mensaje": "Sala eliminada"}
+        raise

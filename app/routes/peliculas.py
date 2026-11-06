@@ -1,9 +1,10 @@
 import re
 from typing import Optional
 from bson import ObjectId
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.database import db
 from app.models.pelicula import PeliculaCrear, PeliculaActualizar
+from app.seguridad import requerir_admin
 
 router = APIRouter(prefix="/peliculas", tags=["Películas"])
 coleccion = db["peliculas"]
@@ -20,7 +21,7 @@ def serializar(doc: dict) -> dict:
     return doc
 
 
-@router.post("/", status_code=201)
+@router.post("/", status_code=201, dependencies=[Depends(requerir_admin)])
 def crear_pelicula(datos: PeliculaCrear):
     existe = coleccion.find_one(
         {"titulo": {"$regex": f"^{re.escape(datos.titulo)}$", "$options": "i"}}
@@ -60,7 +61,7 @@ def obtener_pelicula(id: str):
     return serializar(doc)
 
 
-@router.put("/{id}")
+@router.put("/{id}", dependencies=[Depends(requerir_admin)])
 def actualizar_pelicula(id: str, datos: PeliculaActualizar):
     cambios = datos.model_dump(exclude_unset=True)
     if not cambios:
@@ -71,7 +72,7 @@ def actualizar_pelicula(id: str, datos: PeliculaActualizar):
     return serializar(coleccion.find_one({"_id": a_object_id(id)}))
 
 
-@router.delete("/{id}")
+@router.delete("/{id}", dependencies=[Depends(requerir_admin)])
 def eliminar_pelicula(id: str):
     resultado = coleccion.delete_one({"_id": a_object_id(id)})
     if resultado.deleted_count == 0:
