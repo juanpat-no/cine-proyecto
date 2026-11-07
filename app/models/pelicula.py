@@ -12,6 +12,7 @@ class PeliculaCrear(BaseModel):
     genero: str = Field(min_length=1)
     clasificacion: Clasificacion
     estado: Estado = "en_cartelera"
+    poster_url: Optional[str] = Field(default=None, max_length=500, pattern=r"^https?://")
 
 
 class PeliculaActualizar(BaseModel):
@@ -21,3 +22,4 @@ class PeliculaActualizar(BaseModel):
     genero: Optional[str] = None
     clasificacion: Optional[Clasificacion] = None
     estado: Optional[Estado] = None
+    poster_url: Optional[str] = Field(default=None, max_length=500, pattern=r"^https?://")

@@ -8,7 +8,7 @@ from app.routes import peliculas, salas, funciones, auth, compras, reportes
 
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 
-app = FastAPI(title="Cine API", docs_url=None)
+app = FastAPI(title="Cine Estelar API", docs_url=None)
 app.include_router(auth.router)
 app.include_router(peliculas.router)
 app.include_router(salas.router)
@@ -30,7 +30,7 @@ ESTILO_OSCURO = """
 def docs_oscuro():
     pagina = get_swagger_ui_html(
         openapi_url=app.openapi_url,
-        title="Cine API - Documentación",
+        title="Cine Estelar API - Documentación",
         swagger_ui_parameters={
             "docExpansion": "none",
             "displayRequestDuration": True,

@@ -106,7 +106,11 @@ function matiz(p) {
 
 function poster(p) {
   const h = matiz(p);
-  return `<div class="poster" style="background:linear-gradient(160deg,hsl(${h} 55% 40%),hsl(${(h + 60) % 360} 50% 13%))">
+  const base = `linear-gradient(160deg,hsl(${h} 55% 40%),hsl(${(h + 60) % 360} 50% 13%))`;
+  const fondo = p.poster_url
+    ? `linear-gradient(to top,rgba(0,0,0,.88),rgba(0,0,0,0) 55%),url('${esc(p.poster_url)}') center/cover,${base}`
+    : base;
+  return `<div class="poster" style="background:${fondo}">
     <span class="clasif">${esc(p.clasificacion)}</span>
     <strong>${esc(p.titulo)}</strong>
     <small>${esc(p.genero)} · ${p.duracion_min} min</small></div>`;
@@ -120,13 +124,14 @@ async function vistaCartelera() {
   ]);
   const generos = [...new Set(todas.map(p => p.genero))].sort();
   const d = todas.length ? todas[new Date().getDate() % todas.length] : null;
-  const banner = d ? (() => {
+    const banner = d ? (() => {
     const h = matiz(d);
     return `<a class="banner" href="#/pelicula/${d.id}" style="background:linear-gradient(110deg,hsl(${h} 55% 32%),hsl(${(h + 60) % 360} 50% 10%))">
-      <div><span class="etq">Destacada</span><h1>${esc(d.titulo)}</h1>
+      <div class="banner-txt"><span class="etq">Destacada</span><h1>${esc(d.titulo)}</h1>
       <p>${esc(d.genero)} · ${d.duracion_min} min · Clasificación ${esc(d.clasificacion)}</p>
       <p class="sin">${esc((d.sinopsis || '').slice(0, 160))}</p>
-      <span class="btn">Ver funciones</span></div></a>`;
+      <span class="btn">Ver funciones</span></div>
+      ${d.poster_url ? `<img class="banner-img" src="${esc(d.poster_url)}" alt="" loading="lazy" onerror="this.remove()">` : ''}</a>`;
   })() : '';
   vista.innerHTML = `
     ${banner}
@@ -249,7 +254,7 @@ function mostrarTicket(c, p, f, s) {
     <div class="ticket-wrap">
       <p class="ok-msg">¡Compra confirmada!</p>
       <article class="ticket">
-        <small>CINEAPP</small>
+        <small>CINEESTELAR</small>
         <h2>${esc(p.titulo)}</h2>
         <p>${fecha(f.inicio)} · ${hora(f.inicio)}</p>
         <div class="t-grid">
@@ -341,23 +346,32 @@ async function adminPeliculas(el) {
       <input name="duracion_min" type="number" min="1" max="400" placeholder="Minutos" required style="width:110px">
       <select name="clasificacion">${['TP', '+7', '+12', '+15', '+18'].map(c => `<option>${c}</option>`).join('')}</select>
       <select name="estado">${estados.map(e => `<option>${e}</option>`).join('')}</select>
+      <input name="poster_url" type="url" placeholder="URL del afiche (opcional)" style="flex:1;min-width:200px">
       <input name="sinopsis" placeholder="Sinopsis" style="flex:1;min-width:200px">
       <button class="btn">Crear</button>
     </form>
     <div class="tabla-wrap"><table><tr><th>Título</th><th>Género</th><th>Min</th><th>Clasif.</th><th>Estado</th><th></th></tr>
       ${lista.map(p => `<tr><td>${esc(p.titulo)}</td><td>${esc(p.genero)}</td><td>${p.duracion_min}</td><td>${esc(p.clasificacion)}</td>
         <td><select data-estado="${p.id}">${estados.map(e => `<option ${e === p.estado ? 'selected' : ''}>${e}</option>`).join('')}</select></td>
-        <td><button class="btn ghost small" data-del="${p.id}">Eliminar</button></td></tr>`).join('')}</table></div>`;
+        <td><button class="btn ghost small" data-poster="${p.id}">Afiche</button>
+        <button class="btn ghost small" data-del="${p.id}">Eliminar</button></td></tr>`).join('')}</table></div>`;
   $('#f-pel').onsubmit = guard(async e => {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target));
     d.duracion_min = Number(d.duracion_min);
+    if (!d.poster_url) delete d.poster_url;
     await api('/peliculas/', { method: 'POST', body: d });
     toast('Película creada'); adminPeliculas(el);
   });
   el.querySelectorAll('[data-estado]').forEach(s => s.onchange = guard(async () => {
     await api('/peliculas/' + s.dataset.estado, { method: 'PUT', body: { estado: s.value } });
     toast('Estado actualizado');
+  }));
+  el.querySelectorAll('[data-poster]').forEach(b => b.onclick = guard(async () => {
+    const url = prompt('URL del afiche (debe empezar por https://)');
+    if (!url) return;
+    await api('/peliculas/' + b.dataset.poster, { method: 'PUT', body: { poster_url: url.trim() } });
+    toast('Afiche actualizado'); adminPeliculas(el);
   }));
   el.querySelectorAll('[data-del]').forEach(b => b.onclick = guard(async () => {
     if (!confirm('¿Eliminar esta película?')) return;
