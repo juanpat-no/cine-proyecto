@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.database import db
 from app.models.pelicula import PeliculaCrear, PeliculaActualizar
 from app.seguridad import requerir_admin
+from datetime import datetime
 
 router = APIRouter(prefix="/peliculas", tags=["Películas"])
 coleccion = db["peliculas"]
@@ -74,7 +75,13 @@ def actualizar_pelicula(id: str, datos: PeliculaActualizar):
 
 @router.delete("/{id}", dependencies=[Depends(requerir_admin)])
 def eliminar_pelicula(id: str):
-    resultado = coleccion.delete_one({"_id": a_object_id(id)})
+    oid = a_object_id(id)
+    futuras = db["funciones"].find_one({"pelicula_id": oid, "inicio": {"$gte": datetime.now()}})
+    if futuras:
+        raise HTTPException(
+            status_code=409, detail="No se puede eliminar: la película tiene funciones programadas"
+        )
+    resultado = coleccion.delete_one({"_id": oid})
     if resultado.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Película no encontrada")
     return {"mensaje": "Película eliminada"}
