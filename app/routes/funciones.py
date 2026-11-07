@@ -131,3 +131,26 @@ def eliminar_funcion(id: str):
         raise HTTPException(status_code=409, detail="No se puede eliminar: ya hay boletas vendidas")
     coleccion.delete_one({"_id": doc["_id"]})
     return {"mensaje": "Función eliminada"}
+
+@router.get("/{id}/asientos")
+def mapa_asientos(id: str):
+    funcion = coleccion.find_one({"_id": a_object_id(id)})
+    if not funcion:
+        raise HTTPException(status_code=404, detail="Función no encontrada")
+    sala = db["salas"].find_one({"_id": funcion["sala_id"]})
+    ocupados = set(funcion["asientos_ocupados"])
+    return {
+        "funcion_id": str(funcion["_id"]),
+        "precio": funcion["precio"],
+        "filas": sala["filas"],
+        "columnas": sala["columnas"],
+        "asientos": [
+            {
+                "codigo": a["codigo"],
+                "fila": a["fila"],
+                "numero": a["numero"],
+                "estado": "ocupado" if a["codigo"] in ocupados else "libre",
+            }
+            for a in sala["asientos"]
+        ],
+    }
