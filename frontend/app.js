@@ -98,9 +98,14 @@ $('#f-reg').onsubmit = guard(async e => {
 });
 
 /* ---------- Componentes ---------- */
-function poster(p) {
+function matiz(p) {
   let h = 0;
   for (const c of p.genero + p.titulo) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return h;
+}
+
+function poster(p) {
+  const h = matiz(p);
   return `<div class="poster" style="background:linear-gradient(160deg,hsl(${h} 55% 40%),hsl(${(h + 60) % 360} 50% 13%))">
     <span class="clasif">${esc(p.clasificacion)}</span>
     <strong>${esc(p.titulo)}</strong>
@@ -109,14 +114,23 @@ function poster(p) {
 
 /* ---------- Vistas de cliente ---------- */
 async function vistaCartelera() {
-  vista.innerHTML = '<p class="vacio">Cargando cartelera…</p>';
   const [todas, proximas] = await Promise.all([
     api('/peliculas/?estado=en_cartelera'),
     api('/peliculas/?estado=proximamente'),
   ]);
   const generos = [...new Set(todas.map(p => p.genero))].sort();
+  const d = todas.length ? todas[new Date().getDate() % todas.length] : null;
+  const banner = d ? (() => {
+    const h = matiz(d);
+    return `<a class="banner" href="#/pelicula/${d.id}" style="background:linear-gradient(110deg,hsl(${h} 55% 32%),hsl(${(h + 60) % 360} 50% 10%))">
+      <div><span class="etq">Destacada</span><h1>${esc(d.titulo)}</h1>
+      <p>${esc(d.genero)} · ${d.duracion_min} min · Clasificación ${esc(d.clasificacion)}</p>
+      <p class="sin">${esc((d.sinopsis || '').slice(0, 160))}</p>
+      <span class="btn">Ver funciones</span></div></a>`;
+  })() : '';
   vista.innerHTML = `
-    <section class="hero"><h1>Cartelera</h1><p>Elige una película y reserva tus asientos.</p></section>
+    ${banner}
+    <h2 class="sub">Cartelera</h2>
     <div class="filtros">
       <input id="f-q" placeholder="Buscar por título…">
       <select id="f-g"><option value="">Todos los géneros</option>${generos.map(g => `<option>${esc(g)}</option>`).join('')}</select>
@@ -195,16 +209,18 @@ async function vistaFuncion(id) {
     else { sel.add(c); b.classList.add('sel'); }
     actualizar();
   });
-  $('#b-comprar').onclick = guard(async () => {
+    $('#b-comprar').onclick = guard(async () => {
     if (!estado.token) { toast('Inicia sesión para comprar', 'error'); abrirAuth(); return; }
+    let compra;
     try {
-      await api('/compras/', { method: 'POST', body: { funcion_id: id, asientos: [...sel] } });
-      toast('¡Compra realizada!');
-      location.hash = '#/compras';
+      compra = await api('/compras/', { method: 'POST', body: { funcion_id: id, asientos: [...sel] } });
     } catch (e) {
       toast(e.message, 'error');
       vistaFuncion(id);
+      return;
     }
+    toast('¡Compra realizada!');
+    mostrarTicket(compra, p, f, s);
   });
 }
 
@@ -225,6 +241,28 @@ async function vistaCompras() {
     toast('Compra cancelada');
     vistaCompras();
   }));
+}
+
+function mostrarTicket(c, p, f, s) {
+  const barras = [...c.id].map(ch => `<i style="width:${1 + (parseInt(ch, 16) || 1) % 4}px"></i>`).join('');
+  vista.innerHTML = `
+    <div class="ticket-wrap">
+      <p class="ok-msg">¡Compra confirmada!</p>
+      <article class="ticket">
+        <small>CINEAPP</small>
+        <h2>${esc(p.titulo)}</h2>
+        <p>${fecha(f.inicio)} · ${hora(f.inicio)}</p>
+        <div class="t-grid">
+          <div><small>Sala</small><b>${esc(s.nombre)}</b></div>
+          <div><small>Formato</small><b>${esc(s.tipo)}</b></div>
+          <div><small>Asientos</small><b>${c.asientos.join(', ')}</b></div>
+          <div><small>Total</small><b>${money(c.total)}</b></div>
+        </div>
+        <div class="t-corte"></div>
+        <div class="t-pie"><div class="barras">${barras}</div><small>N.º ${c.id.slice(-8).toUpperCase()}</small></div>
+      </article>
+      <div class="acciones"><a class="btn" href="#/compras">Ver mis compras</a><a class="btn ghost" href="#/">Volver a la cartelera</a></div>
+    </div>`;
 }
 
 /* ---------- Administración ---------- */
@@ -387,9 +425,14 @@ async function adminFunciones(el, dia = hoyLocal()) {
 }
 
 /* ---------- Router ---------- */
+function esqueleto() {
+  return '<div class="grid">' + '<div class="sk"></div>'.repeat(8) + '</div>';
+}
+
 async function router() {
   const [, ruta, id] = location.hash.split('/');
   window.scrollTo(0, 0);
+  vista.innerHTML = esqueleto();
   try {
     if (ruta === 'pelicula') await vistaPelicula(id);
     else if (ruta === 'funcion') await vistaFuncion(id);
@@ -400,6 +443,7 @@ async function router() {
     vista.innerHTML = `<p class="vacio">${esc(e.message)}</p>`;
   }
 }
+
 window.addEventListener('hashchange', router);
 pintarNav();
 router();
