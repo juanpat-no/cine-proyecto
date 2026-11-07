@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CineApp</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="barra">
+  <a class="logo" href="#/">CINE<span>APP</span></a>
+  <nav id="nav-user"></nav>
+</header>
+<main id="vista"></main>
+
+<dialog id="auth">
+  <div class="tabs"><a id="t-login" class="on">Ingresar</a><a id="t-reg">Crear cuenta</a></div>
+  <form id="f-login" class="form col">
+    <input name="correo" type="email" placeholder="Correo" required>
+    <input name="password" type="password" placeholder="Contraseña" required>
+    <button class="btn">Entrar</button>
+  </form>
+  <form id="f-reg" class="form col" hidden>
+    <input name="nombre" placeholder="Nombre completo" required minlength="2">
+    <input name="correo" type="email" placeholder="Correo" required>
+    <input name="password" type="password" placeholder="Contraseña (mínimo 8)" required minlength="8">
+    <label class="campo">Fecha de nacimiento<input name="fecha_nacimiento" type="date" required></label>
+    <button class="btn">Registrarme</button>
+  </form>
+  <button class="btn ghost" id="cerrar-auth" type="button">Cerrar</button>
+</dialog>
+
+<div id="toast"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
