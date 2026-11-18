@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 class CompraCrear(BaseModel):
     funcion_id: str
     asientos: list[str] = Field(min_length=1, max_length=8)
+    estudiante: bool = False
 
     @field_validator("asientos")
     @classmethod

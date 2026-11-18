@@ -182,6 +182,16 @@ async function vistaPelicula(id) {
       : '<p class="vacio">No hay funciones programadas.</p>'}`;
 }
 
+function cotizar(precio, n, inicio, estudiante) {
+  const subtotal = precio * n;
+  const d2x1 = new Date(inicio).getDay() === 3 ? precio * Math.floor(n / 2) : 0;
+  const dEst = estudiante ? Math.floor(subtotal * 20 / 100) : 0;
+  let descuento = 0, tipo = null;
+  if (dEst > d2x1) { descuento = dEst; tipo = 'estudiante'; }
+  else if (d2x1 > 0) { descuento = d2x1; tipo = '2x1'; }
+  return { subtotal, descuento, tipo, total: subtotal - descuento };
+}
+
 async function vistaFuncion(id) {
   const f = await api('/funciones/' + id);
   const [p, s, mapa] = await Promise.all([
@@ -190,23 +200,35 @@ async function vistaFuncion(id) {
   const filas = {};
   mapa.asientos.forEach(a => (filas[a.fila] ||= []).push(a));
   const sel = new Set();
+  const esMiercoles = new Date(f.inicio).getDay() === 3;
   vista.innerHTML = `
     <a href="#/pelicula/${p.id}" class="sub" style="color:var(--suave)">← ${esc(p.titulo)}</a>
     <h1>${esc(p.titulo)}</h1>
     <p style="color:var(--suave)">${fecha(f.inicio)} · ${hora(f.inicio)} · ${esc(s.nombre)} (${esc(s.tipo)}) · ${money(f.precio)} por boleta</p>
+    ${esMiercoles ? '<p class="promo">Miércoles 2x1: por cada 2 boletas pagas 1.</p>' : ''}
     <div class="sala-wrap">
       <div class="pantalla"></div><div class="pantalla-et">PANTALLA</div>
       ${Object.keys(filas).sort().map(fl => `<div class="fila"><span class="et">${fl}</span>${filas[fl].map(a =>
         `<button class="asiento ${a.estado}" data-c="${a.codigo}" title="${a.codigo}" ${a.estado === 'ocupado' ? 'disabled' : ''}>${a.numero}</button>`).join('')}</div>`).join('')}
     </div>
     <div class="leyenda"><span><i style="background:var(--libre)"></i>Libre</span><span><i style="background:var(--acento)"></i>Seleccionado</span><span><i style="background:#4a2630"></i>Ocupado</span></div>
-    <div class="resumen"><div id="r-txt">Selecciona hasta 8 asientos</div><button class="btn" id="b-comprar" disabled>Comprar</button></div>`;
+    <div class="resumen">
+      <div id="r-txt">Selecciona hasta 8 asientos</div>
+      <label class="chk"><input type="checkbox" id="c-est"> Tarifa de estudiante (−20 %)</label>
+      <button class="btn" id="b-comprar" disabled>Comprar</button>
+    </div>`;
 
   const actualizar = () => {
     const n = sel.size;
-    $('#r-txt').innerHTML = n ? `<b>${[...sel].sort().join(', ')}</b> · ${n} boleta(s) · <b>${money(n * f.precio)}</b>` : 'Selecciona hasta 8 asientos';
-    $('#b-comprar').disabled = !n;
+    if (!n) { $('#r-txt').innerHTML = 'Selecciona hasta 8 asientos'; $('#b-comprar').disabled = true; return; }
+    const q = cotizar(f.precio, n, f.inicio, $('#c-est').checked);
+    const lista = `<b>${[...sel].sort().join(', ')}</b> · ${n} boleta(s) · `;
+    $('#r-txt').innerHTML = q.descuento
+      ? `${lista}<s>${money(q.subtotal)}</s> <b>${money(q.total)}</b> <span class="etiqueta">${q.tipo === '2x1' ? '2x1 miércoles' : 'estudiante'} −${money(q.descuento)}</span>`
+      : `${lista}<b>${money(q.total)}</b>`;
+    $('#b-comprar').disabled = false;
   };
+  $('#c-est').onchange = actualizar;
   vista.querySelectorAll('.asiento:not(.ocupado)').forEach(b => b.onclick = () => {
     const c = b.dataset.c;
     if (sel.has(c)) { sel.delete(c); b.classList.remove('sel'); }
@@ -214,11 +236,11 @@ async function vistaFuncion(id) {
     else { sel.add(c); b.classList.add('sel'); }
     actualizar();
   });
-    $('#b-comprar').onclick = guard(async () => {
+  $('#b-comprar').onclick = guard(async () => {
     if (!estado.token) { toast('Inicia sesión para comprar', 'error'); abrirAuth(); return; }
     let compra;
     try {
-      compra = await api('/compras/', { method: 'POST', body: { funcion_id: id, asientos: [...sel] } });
+      compra = await api('/compras/', { method: 'POST', body: { funcion_id: id, asientos: [...sel], estudiante: $('#c-est').checked } });
     } catch (e) {
       toast(e.message, 'error');
       vistaFuncion(id);
@@ -237,7 +259,7 @@ async function vistaCompras() {
       const puede = c.estado === 'activa' && new Date(c.inicio) - Date.now() > 2 * 3600 * 1000;
       return `<article class="compra ${c.estado}">
         <div><b>${esc(c.pelicula)}</b> <span class="etiqueta ${c.estado}">${c.estado}</span><br>
-        <small>${fecha(c.inicio)} · ${hora(c.inicio)} · ${esc(c.sala)} · Asientos: ${c.asientos.join(', ')}</small></div>
+        <small>${fecha(c.inicio)} · ${hora(c.inicio)} · ${esc(c.sala)} · Asientos: ${c.asientos.join(', ')}${c.descuento ? ` · Descuento −${money(c.descuento)}` : ''}</small></div>
         <div><b>${money(c.total)}</b> ${puede ? `<button class="btn ghost small" data-cancelar="${c.id}">Cancelar</button>` : ''}</div></article>`;
     }).join('') : '<p class="vacio">Aún no tienes compras.</p>');
   vista.querySelectorAll('[data-cancelar]').forEach(b => b.onclick = guard(async () => {
@@ -262,6 +284,7 @@ function mostrarTicket(c, p, f, s) {
           <div><small>Formato</small><b>${esc(s.tipo)}</b></div>
           <div><small>Asientos</small><b>${c.asientos.join(', ')}</b></div>
           <div><small>Total</small><b>${money(c.total)}</b></div>
+                    ${c.descuento ? `<div><small>Descuento</small><b>${c.tipo_descuento === 'estudiante' ? 'Estudiante' : '2x1 miércoles'} · −${money(c.descuento)}</b></div>` : ''}
         </div>
         <div class="t-corte"></div>
         <div class="t-pie"><div class="barras">${barras}</div><small>N.º ${c.id.slice(-8).toUpperCase()}</small></div>

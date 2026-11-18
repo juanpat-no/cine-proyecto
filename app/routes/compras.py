@@ -11,6 +11,8 @@ coleccion.create_index("usuario_id")
 
 EDAD_MINIMA = {"TP": 0, "+7": 7, "+12": 12, "+15": 15, "+18": 18}
 HORAS_CANCELACION = 2
+PORCENTAJE_ESTUDIANTE = 20
+DIA_2X1 = 2  # miércoles (lunes = 0)
 
 
 def a_object_id(id: str) -> ObjectId:
@@ -29,6 +31,19 @@ def serializar(doc: dict) -> dict:
 
 def calcular_edad(nacimiento: datetime, hoy: datetime) -> int:
     return hoy.year - nacimiento.year - ((hoy.month, hoy.day) < (nacimiento.month, nacimiento.day))
+
+
+def calcular_total(precio: int, cantidad: int, inicio: datetime, estudiante: bool):
+    subtotal = precio * cantidad
+    desc_2x1 = precio * (cantidad // 2) if inicio.weekday() == DIA_2X1 else 0
+    desc_est = subtotal * PORCENTAJE_ESTUDIANTE // 100 if estudiante else 0
+    if desc_est > desc_2x1:
+        tipo, descuento = "estudiante", desc_est
+    elif desc_2x1 > 0:
+        tipo, descuento = "2x1_miercoles", desc_2x1
+    else:
+        tipo, descuento = None, 0
+    return subtotal, descuento, tipo, subtotal - descuento
 
 
 @router.post("/", status_code=201)
@@ -63,12 +78,18 @@ def crear_compra(datos: CompraCrear, usuario: dict = Depends(usuario_actual)):
     if reserva.modified_count == 0:
         raise HTTPException(status_code=409, detail="Alguno de los asientos ya fue vendido")
 
+    subtotal, descuento, tipo, total = calcular_total(
+        funcion["precio"], len(datos.asientos), funcion["inicio"], datos.estudiante
+    )
     documento = {
         "usuario_id": usuario["_id"],
         "funcion_id": funcion["_id"],
         "asientos": datos.asientos,
         "precio_unitario": funcion["precio"],
-        "total": funcion["precio"] * len(datos.asientos),
+        "subtotal": subtotal,
+        "descuento": descuento,
+        "tipo_descuento": tipo,
+        "total": total,
         "estado": "activa",
         "creada": ahora,
     }
@@ -99,6 +120,9 @@ def mis_compras(usuario: dict = Depends(usuario_actual)):
         {"$unwind": "$sala"},
         {"$project": {
             "asientos": 1,
+            "subtotal": 1,
+            "descuento": 1,
+            "tipo_descuento": 1,
             "total": 1,
             "estado": 1,
             "creada": 1,
