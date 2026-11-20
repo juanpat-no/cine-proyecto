@@ -4,7 +4,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from app.database import db
-from app.routes import peliculas, salas, funciones, auth, compras, reportes
+from app.routes import peliculas, salas, funciones, auth, compras, reportes, resenas
 
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 
@@ -15,6 +15,7 @@ app.include_router(salas.router)
 app.include_router(funciones.router)
 app.include_router(compras.router)
 app.include_router(reportes.router)
+app.include_router(resenas.router)
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 
 ESTILO_OSCURO = """
