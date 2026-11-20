@@ -127,6 +127,7 @@ async function vistaCartelera() {
     const banner = d ? (() => {
     const h = matiz(d);
     return `<a class="banner" href="#/pelicula/${d.id}" style="background:linear-gradient(110deg,hsl(${h} 55% 32%),hsl(${(h + 60) % 360} 50% 10%))">
+      ${d.poster_url ? `<div class="banner-bg" style="background-image:url('${esc(d.poster_url)}')"></div>` : ''}
       <div class="banner-txt"><span class="etq">Destacada</span><h1>${esc(d.titulo)}</h1>
       <p>${esc(d.genero)} · ${d.duracion_min} min · Clasificación ${esc(d.clasificacion)}</p>
       <p class="sin">${esc((d.sinopsis || '').slice(0, 160))}</p>
@@ -135,6 +136,7 @@ async function vistaCartelera() {
   })() : '';
   vista.innerHTML = `
     ${banner}
+    ${new Date().getDay() === 3 ? '<p class="promo" style="margin-top:20px">Hoy es miércoles: pagas 1 de cada 2 boletas.</p>' : ''}
     <h2 class="sub">Cartelera</h2>
     <div class="filtros">
       <input id="f-q" placeholder="Buscar por título…">
@@ -176,7 +178,7 @@ async function vistaPelicula(id) {
     ${dias.length ? dias.map(d => `
       <div class="dia">${fecha(d + 'T00:00:00')}</div>
       <div class="funciones">${porDia[d].map(f => `
-        <a class="funcion" href="#/funcion/${f.id}"><b>${hora(f.inicio)}</b>
+        <a class="funcion" href="#/funcion/${f.id}">${new Date(f.inicio).getDay() === 3 ? '<span class="mini">2x1</span>' : ''}<b>${hora(f.inicio)}</b>
         <span>${esc(f.tipo_sala)} · ${esc(f.sala)}</span>
         <small>${money(f.precio)} · ${f.capacidad - f.ocupados} libres</small></a>`).join('')}</div>`).join('')
       : '<p class="vacio">No hay funciones programadas.</p>'}`;
@@ -208,10 +210,10 @@ async function vistaFuncion(id) {
     ${esMiercoles ? '<p class="promo">Miércoles 2x1: por cada 2 boletas pagas 1.</p>' : ''}
     <div class="sala-wrap">
       <div class="pantalla"></div><div class="pantalla-et">PANTALLA</div>
-      ${Object.keys(filas).sort().map(fl => `<div class="fila"><span class="et">${fl}</span>${filas[fl].map(a =>
-        `<button class="asiento ${a.estado}" data-c="${a.codigo}" title="${a.codigo}" ${a.estado === 'ocupado' ? 'disabled' : ''}>${a.numero}</button>`).join('')}</div>`).join('')}
+      ${Object.keys(filas).sort().map(fl => `<div class="fila"><span class="et">${fl}</span>${filas[fl].map((a, i, arr) =>
+        `<button class="asiento ${a.estado}${arr.length > 6 && i === Math.floor(arr.length / 2) ? ' pasillo' : ''}" data-c="${a.codigo}" title="${a.codigo}" ${a.estado === 'ocupado' ? 'disabled' : ''}>${a.numero}</button>`).join('')}</div>`).join('')}
     </div>
-    <div class="leyenda"><span><i style="background:var(--libre)"></i>Libre</span><span><i style="background:var(--acento)"></i>Seleccionado</span><span><i style="background:#4a2630"></i>Ocupado</span></div>
+    <div class="leyenda"><span><i style="background:var(--libre)"></i>Libre</span><span><i style="background:var(--acento)"></i>Seleccionado</span><span><i style="background:var(--ocupado)"></i>Ocupado</span></div>
     <div class="resumen">
       <div id="r-txt">Selecciona hasta 8 asientos</div>
       <label class="chk"><input type="checkbox" id="c-est"> Tarifa de estudiante (−20 %)</label>
@@ -316,7 +318,7 @@ function grafico(id, tipo, etiquetas, datos, titulo) {
     options: {
       maintainAspectRatio: false,
       plugins: { legend: { display: tipo === 'doughnut' } },
-      scales: tipo === 'doughnut' ? {} : { y: { beginAtZero: true, grid: { color: '#2f2f3d' } }, x: { grid: { display: false } } },
+      scales: tipo === 'doughnut' ? {} : { y: { beginAtZero: true, grid: { color: '#2c2b3b' } }, x: { grid: { display: false } } },
     },
   });
 }
@@ -350,7 +352,8 @@ async function adminDashboard(el) {
     <h2>Mejores clientes</h2>
     <div class="tabla-wrap"><table><tr><th>Cliente</th><th>Compras</th><th>Boletas</th><th>Ticket promedio</th><th>Gasto total</th></tr>
       ${clientes.map(c => `<tr><td>${esc(c.cliente)}</td><td>${c.compras}</td><td>${c.boletas}</td><td>${money(c.ticket_promedio)}</td><td>${money(c.gasto)}</td></tr>`).join('')}</table></div>`;
-  Chart.defaults.color = '#9a9aab';
+  Chart.defaults.color = '#a09eb4';
+  Chart.defaults.font.family = "'DM Sans', system-ui, sans-serif";
   grafico('g1', 'bar', top.map(x => x.pelicula), top.map(x => x.ingresos), 'Ingresos');
   grafico('g2', 'line', periodo.map(x => x.periodo.slice(5)), periodo.map(x => x.ingresos), 'Ingresos');
   grafico('g3', 'doughnut', genero.map(x => x.genero), genero.map(x => x.ingresos), 'Ingresos');
