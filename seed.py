@@ -1,6 +1,8 @@
 import random
+import sys
 from datetime import datetime, timedelta
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 from app.database import db
 from app.seguridad import hashear
 
@@ -85,15 +87,111 @@ def tasa_ocupacion(inicio, tipo, ahora):
     return tasa
 
 
+PROB_RESENA = 0.7      # fracción de parejas cliente-película que dejan reseña
+PROB_COMENTARIO = 0.7  # fracción de reseñas que llevan texto
+COMENTARIOS = {
+    5: [
+        "Una experiencia increíble, el sonido y la sala ayudaron muchísimo.",
+        "De lo mejor que he visto este año. La recomiendo sin dudarlo.",
+        "Final espectacular, salí del cine sin palabras.",
+        "Actuaciones brillantes y una historia que te atrapa de principio a fin.",
+    ],
+    4: [
+        "Muy buena, con un par de momentos lentos pero vale la pena.",
+        "Entretenida de principio a fin. Volvería a verla.",
+        "Buena película, la fotografía es hermosa.",
+    ],
+    3: [
+        "Cumple, pero esperaba un poco más.",
+        "Está bien para pasar el rato, aunque no es memorable.",
+        "Tiene buenas ideas, pero el ritmo decae a la mitad.",
+    ],
+    2: [
+        "Me costó engancharme con la historia.",
+        "Prometía mucho y se quedó corta.",
+    ],
+    1: [
+        "No me gustó, el guion no se sostiene.",
+    ],
+}
+
+
+def sembrar_resenas(ahora):
+    """Crea reseñas de ejemplo para cada pareja cliente-película con una compra activa de una
+    función ya iniciada (la misma regla de la API). Solo agrega: el índice único impide duplicados."""
+    rnd = random.Random(42)  # semilla propia: no altera el resto de datos y es repetible
+    resenas = db["resenas"]
+    resenas.create_index([("usuario_id", 1), ("pelicula_id", 1)], unique=True)
+    resenas.create_index([("pelicula_id", 1), ("creada", -1)])
+
+    clientes = {u["_id"]: u for u in db["usuarios"].find({"rol": "cliente"})}
+    pipeline = [
+        {"$match": {"estado": "activa"}},
+        {"$lookup": {"from": "funciones", "localField": "funcion_id",
+                     "foreignField": "_id", "as": "funcion"}},
+        {"$unwind": "$funcion"},
+        {"$match": {"funcion.inicio": {"$lt": ahora}}},
+        {"$group": {"_id": {"u": "$usuario_id", "p": "$funcion.pelicula_id"},
+                    "inicio": {"$min": "$funcion.inicio"}}},
+    ]
+    # El orden de un aggregate no está garantizado: se ordena para que el resultado sea repetible.
+    parejas = sorted(
+        ((d["_id"]["u"], d["_id"]["p"], d["inicio"]) for d in db["compras"].aggregate(pipeline)),
+        key=lambda t: (str(t[0]), str(t[1])),
+    )
+    if not parejas:
+        print("No hay compras activas de funciones ya iniciadas: no se crearon reseñas.")
+        return
+
+    medias = {}  # cada película tiene una calidad base distinta, así los promedios varían
+    creadas = repetidas = 0
+    for usuario_id, pelicula_id, inicio in parejas:
+        usuario = clientes.get(usuario_id)
+        if not usuario or rnd.random() > PROB_RESENA:
+            continue
+        if pelicula_id not in medias:
+            medias[pelicula_id] = rnd.uniform(3.0, 4.7)
+        nota = max(1, min(5, round(rnd.gauss(medias[pelicula_id], 0.9))))
+        comentario = rnd.choice(COMENTARIOS[nota]) if rnd.random() < PROB_COMENTARIO else ""
+        try:
+            resenas.insert_one({
+                "pelicula_id": pelicula_id,
+                "usuario_id": usuario_id,
+                "nombre_usuario": usuario["nombre"],
+                "calificacion": nota,
+                "comentario": comentario,
+                "creada": min(ahora, inicio + timedelta(hours=rnd.randint(3, 72))),
+                "editada": None,
+            })
+            creadas += 1
+        except DuplicateKeyError:
+            repetidas += 1
+    print(f"Reseñas creadas: {creadas} | ya existían: {repetidas} | total en '{db.name}': {resenas.count_documents({})}")
+
+
 def main():
-    if input("Esto borra peliculas, salas, funciones, compras y clientes. Escribe SI para continuar: ") != "SI":
+    ahora = datetime.now()
+
+    if "--solo-resenas" in sys.argv:
+        # Solo agrega reseñas, no borra nada: es la única forma de usar este script en 'cine'.
+        print(f"Base de datos: {db.name} (solo se agregan reseñas)")
+        if db.name == "cine" and input("Es la base de PRODUCCIÓN. Escribe 'cine' para continuar: ").strip() != "cine":
+            print("Cancelado")
+            return
+        sembrar_resenas(ahora)
+        return
+
+    if db.name == "cine":
+        sys.exit("Este script borra datos y no se puede ejecutar contra la base de producción 'cine'. "
+                 "Para agregar solo reseñas usa: python seed.py --solo-resenas")
+
+    if input(f"Base de datos: {db.name}. Esto borra peliculas, salas, funciones, compras, resenas y clientes. Escribe SI para continuar: ") != "SI":
         print("Cancelado")
         return
 
-    ahora = datetime.now()
     hoy = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    for nombre in ("peliculas", "salas", "funciones", "compras"):
+    for nombre in ("peliculas", "salas", "funciones", "compras", "resenas"):
         db[nombre].delete_many({})
     db["usuarios"].delete_many({"rol": "cliente"})
 
@@ -218,6 +316,8 @@ def main():
     print(f"Funciones: {len(lista_funciones)} | Compras: {len(lista_compras)}")
     print("Admin: admin@cine.com / Admin12345")
     print(f"Clientes demo: laura.gomez@correo.com / {PASSWORD_CLIENTES}")
+
+    sembrar_resenas(ahora)
 
 
 if __name__ == "__main__":
