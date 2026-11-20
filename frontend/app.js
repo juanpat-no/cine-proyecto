@@ -6,6 +6,8 @@ const fecha = d => new Date(d).toLocaleDateString('es-CO', { weekday: 'long', da
 const hoyLocal = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const PALETA = ['#e63946', '#f4a261', '#2a9d8f', '#457b9d', '#8e6bd1', '#e9c46a', '#16a085', '#d35400'];
 
+let PROMEDIOS = {}; // promedio de reseñas por película (se llena en la cartelera)
+
 const estado = {
   token: localStorage.getItem('token'),
   usuario: JSON.parse(localStorage.getItem('usuario') || 'null'),
@@ -106,6 +108,7 @@ function matiz(p) {
 
 function poster(p) {
   const h = matiz(p);
+  const pr = PROMEDIOS[p.id];
   const base = `linear-gradient(160deg,hsl(${h} 55% 40%),hsl(${(h + 60) % 360} 50% 13%))`;
   const fondo = p.poster_url
     ? `linear-gradient(to top,rgba(0,0,0,.88),rgba(0,0,0,0) 55%),url('${esc(p.poster_url)}') center/cover,${base}`
@@ -113,15 +116,17 @@ function poster(p) {
   return `<div class="poster" style="background:${fondo}">
     <span class="clasif">${esc(p.clasificacion)}</span>
     <strong>${esc(p.titulo)}</strong>
-    <small>${esc(p.genero)} · ${p.duracion_min} min</small></div>`;
+    <small>${esc(p.genero)} · ${p.duracion_min} min${pr ? ` · <span class="nota">★ ${pr.promedio.toFixed(1)}</span>` : ''}</small></div>`;
 }
 
 /* ---------- Vistas de cliente ---------- */
 async function vistaCartelera() {
-  const [todas, proximas] = await Promise.all([
+  const [todas, proximas, prom] = await Promise.all([
     api('/peliculas/?estado=en_cartelera'),
     api('/peliculas/?estado=proximamente'),
+    api('/resenas/promedios').catch(() => ({})),
   ]);
+  PROMEDIOS = prom;
   const generos = [...new Set(todas.map(p => p.genero))].sort();
   const d = todas.length ? todas[new Date().getDate() % todas.length] : null;
     const banner = d ? (() => {
@@ -181,7 +186,108 @@ async function vistaPelicula(id) {
         <a class="funcion" href="#/funcion/${f.id}">${new Date(f.inicio).getDay() === 3 ? '<span class="mini">2x1</span>' : ''}<b>${hora(f.inicio)}</b>
         <span>${esc(f.tipo_sala)} · ${esc(f.sala)}</span>
         <small>${money(f.precio)} · ${f.capacidad - f.ocupados} libres</small></a>`).join('')}</div>`).join('')
-      : '<p class="vacio">No hay funciones programadas.</p>'}`;
+      : '<p class="vacio">No hay funciones programadas.</p>'}
+    <div id="resenas"></div>`;
+  await cargarResenas(id).catch(() => { $('#resenas').innerHTML = ''; });
+}
+
+/* ---------- Reseñas ---------- */
+const estrellas = v => `<span class="stars" style="--v:${v}" role="img" aria-label="${v} de 5"></span>`;
+const fechaCorta = d => new Date(d).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+
+function itemResena(r, esAdmin) {
+  return `<article class="res">
+    <div class="res-cab"><b>${esc(r.nombre_usuario)}</b> ${estrellas(r.calificacion)}
+      <small>${fechaCorta(r.creada)}${r.editada ? ' · editada' : ''}</small>
+      ${esAdmin ? `<button class="btn ghost small" data-del-res="${r.id}">Eliminar</button>` : ''}</div>
+    ${r.comentario ? `<p>${esc(r.comentario)}</p>` : ''}</article>`;
+}
+
+function formResena(u, mio) {
+  if (!u) return '<p class="res-nota">Inicia sesión para dejar tu reseña.</p>';
+  if (u.rol !== 'cliente') return '';
+  if (!mio || !mio.puede_resenar) return '<p class="res-nota">Podrás reseñar esta película después de ver una función.</p>';
+  const m = mio.mia;
+  return `<form id="f-res" class="res-form">
+    <b>${m ? 'Tu reseña' : 'Deja tu reseña'}</b>
+    <div class="star-input" id="star-in" role="radiogroup" aria-label="Calificación">
+      ${[1, 2, 3, 4, 5].map(n => `<button type="button" role="radio" data-v="${n}" aria-label="${n} estrellas">★</button>`).join('')}
+    </div>
+    <textarea name="comentario" rows="3" maxlength="500" placeholder="¿Qué te pareció? (opcional)">${esc(m ? m.comentario : '')}</textarea>
+    <div class="acciones" style="justify-content:flex-start;margin:0">
+      <button class="btn">${m ? 'Guardar cambios' : 'Publicar reseña'}</button>
+      ${m ? '<button class="btn ghost" type="button" id="b-res-del">Eliminar mi reseña</button>' : ''}
+    </div></form>`;
+}
+
+async function cargarResenas(peliculaId) {
+  const cont = $('#resenas');
+  const u = estado.usuario;
+  const [data, mio] = await Promise.all([
+    api(`/peliculas/${peliculaId}/resenas`),
+    estado.token && u && u.rol === 'cliente'
+      ? api(`/peliculas/${peliculaId}/resenas/mi-estado`) : Promise.resolve(null),
+  ]);
+  const esAdmin = !!u && u.rol === 'admin';
+  const resumen = data.total
+    ? `<div class="res-resumen">
+        <div class="res-num">${data.promedio.toFixed(1)}</div>
+        <div>${estrellas(data.promedio)}<br><small style="color:var(--suave)">${data.total} reseña${data.total === 1 ? '' : 's'}</small></div>
+        <div class="res-dist">${[5, 4, 3, 2, 1].map(n => `<div><span>${n}</span><i><b style="width:${data.distribucion[n] * 100 / data.total}%"></b></i><span>${data.distribucion[n]}</span></div>`).join('')}</div>
+      </div>`
+    : '<p class="res-nota">Aún no hay reseñas de esta película.</p>';
+
+  cont.innerHTML = `<h2 class="sub">Reseñas</h2>${resumen}${formResena(u, mio)}
+    <div id="lista-res">${data.resenas.map(r => itemResena(r, esAdmin)).join('')}</div>
+    ${data.hay_mas ? '<div class="acciones"><button class="btn ghost" id="mas-res">Ver más reseñas</button></div>' : ''}`;
+
+  const lista = $('#lista-res', cont);
+  lista.onclick = guard(async e => {
+    const b = e.target.closest('[data-del-res]');
+    if (!b || !confirm('¿Eliminar esta reseña?')) return;
+    await api('/resenas/' + b.dataset.delRes, { method: 'DELETE' });
+    toast('Reseña eliminada');
+    await cargarResenas(peliculaId);
+  });
+
+  if ($('#mas-res', cont)) {
+    let pagina = 1;
+    $('#mas-res', cont).onclick = guard(async () => {
+      pagina += 1;
+      const mas = await api(`/peliculas/${peliculaId}/resenas?pagina=${pagina}`);
+      lista.insertAdjacentHTML('beforeend', mas.resenas.map(r => itemResena(r, esAdmin)).join(''));
+      if (!mas.hay_mas) $('#mas-res', cont).remove();
+    });
+  }
+
+  const form = $('#f-res', cont);
+  if (!form) return;
+  const m = mio.mia;
+  let valor = m ? m.calificacion : 0;
+  const estrellasIn = form.querySelectorAll('#star-in button');
+  const pintarEstrellas = () => estrellasIn.forEach(b => {
+    const on = Number(b.dataset.v) <= valor;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', Number(b.dataset.v) === valor);
+  });
+  estrellasIn.forEach(b => b.onclick = () => { valor = Number(b.dataset.v); pintarEstrellas(); });
+  pintarEstrellas();
+
+  form.onsubmit = guard(async e => {
+    e.preventDefault();
+    if (!valor) { toast('Elige de 1 a 5 estrellas', 'error'); return; }
+    const body = { calificacion: valor, comentario: form.comentario.value };
+    if (m) await api('/resenas/' + m.id, { method: 'PUT', body });
+    else await api(`/peliculas/${peliculaId}/resenas`, { method: 'POST', body });
+    toast(m ? 'Reseña actualizada' : 'Reseña publicada');
+    await cargarResenas(peliculaId);
+  });
+  if ($('#b-res-del', cont)) $('#b-res-del', cont).onclick = guard(async () => {
+    if (!confirm('¿Eliminar tu reseña?')) return;
+    await api('/resenas/' + m.id, { method: 'DELETE' });
+    toast('Reseña eliminada');
+    await cargarResenas(peliculaId);
+  });
 }
 
 function cotizar(precio, n, inicio, estudiante) {

@@ -184,6 +184,33 @@ dialog::backdrop{background:#000b;backdrop-filter:blur(3px)}
   background-size:200% 100%;animation:brillo 1.2s linear infinite}
 .pie{max-width:1100px;margin:0 auto;padding:20px;color:var(--suave);font-size:12px;text-align:center;border-top:1px solid var(--borde)}
 
+/* ---------- Reseñas ---------- */
+.stars{--v:0;display:inline-block;font-size:17px;line-height:1;vertical-align:middle;
+  background:linear-gradient(90deg,var(--promo) calc(var(--v)*20%),#3a3950 0);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.stars::before{content:"★★★★★"}
+.poster .nota{color:var(--promo);font-weight:700}
+.res-resumen{display:flex;gap:28px;align-items:center;flex-wrap:wrap;margin-bottom:22px}
+.res-num{font-family:var(--serif);font-size:56px;font-weight:700;line-height:1}
+.res-dist{flex:1;min-width:200px;max-width:340px;display:grid;gap:4px;font-size:13px;color:var(--suave)}
+.res-dist>div{display:grid;grid-template-columns:14px 1fr 24px;gap:8px;align-items:center}
+.res-dist i{display:block;height:6px;border-radius:3px;background:var(--panel2);overflow:hidden}
+.res-dist i b{display:block;height:100%;background:var(--promo)}
+.res-form{display:flex;flex-direction:column;gap:10px;background:var(--panel);border:1px solid var(--borde);
+  border-radius:var(--r);padding:16px 20px;margin-bottom:22px}
+.res-form textarea{resize:vertical}
+.res-nota{color:var(--suave);margin:0 0 20px}
+.star-input{display:flex;gap:2px}
+.star-input button{background:none;border:0;padding:0 2px;font-size:32px;line-height:1;color:#3a3950;
+  cursor:pointer;transition:color .12s,transform .1s}
+.star-input button.on{color:var(--promo)}
+.star-input button:hover{transform:scale(1.15)}
+.res{border-top:1px solid var(--borde);padding:14px 0}
+.res-cab{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.res-cab small{color:var(--suave)}
+.res-cab .btn{margin-left:auto}
+.res p{margin:6px 0 0;max-width:70ch;white-space:pre-line}
+
 /* ---------- Responsive y accesibilidad ---------- */
 @media(max-width:640px){
   .barra{padding:12px 16px}
